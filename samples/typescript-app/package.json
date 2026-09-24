@@ -1,0 +1,1 @@
+{"name":"sample-typescript-app","private":true,"scripts":{"start":"node src/index.ts"},"dependencies":{"typescript":"^5.0.0"}}

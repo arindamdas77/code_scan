@@ -1,0 +1,83 @@
+services:
+  backend:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-review}:${POSTGRES_PASSWORD:-review}@postgres:5432/${POSTGRES_DB:-review}
+      REDIS_URL: redis://redis:6379/0
+      REPOSITORY_ROOT: /data/repositories
+      REPORT_ROOT: /data/reports
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
+      API_BEARER_TOKEN: ${API_BEARER_TOKEN:-}
+    volumes:
+      - repositories:/data/repositories
+      - reports:/data/reports
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+  worker:
+    build: ./backend
+    command: python -m app.worker
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-review}:${POSTGRES_PASSWORD:-review}@postgres:5432/${POSTGRES_DB:-review}
+      REDIS_URL: redis://redis:6379/0
+      REPOSITORY_ROOT: /data/repositories
+      REPORT_ROOT: /data/reports
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
+      API_BEARER_TOKEN: ${API_BEARER_TOKEN:-}
+    volumes:
+      - repositories:/data/repositories
+      - reports:/data/reports
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+  frontend:
+    build: ./frontend
+    ports: ["3000:3000"]
+    depends_on: [backend]
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-review}
+      POSTGRES_USER: ${POSTGRES_USER:-review}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-review}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  sandbox:
+    build: ./sandbox
+    command: ["sleep", "infinity"]
+    read_only: true
+    tmpfs: [/tmp]
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+
+volumes:
+  repositories:
+  reports:
+  postgres_data:
+  redis_data:
